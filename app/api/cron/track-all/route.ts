@@ -9,6 +9,9 @@ import type { Product } from "@/lib/types";
 // sınırı aşabilir; o noktada bu route'u sayfalama (örn. ?offset=) ile parça
 // parça çalıştıracak şekilde bölmek gerekir.
 export const maxDuration = 60;
+// Trendyol, ABD datacenter IP'lerinden gelen istekleri bot sanıp 403 ile
+// reddedebiliyor; fonksiyonu Türkiye'ye en yakın Vercel bölgesine sabitliyoruz.
+export const preferredRegion = "fra1";
 
 const DELAY_BETWEEN_REQUESTS_MS = 1200;
 

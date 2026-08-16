@@ -23,6 +23,9 @@ import type { PriceHistoryPoint, Product } from "@/lib/types";
 // varsayılan 10sn ile sınırlıdır; bu route'un güvenilir çalışması için Pro
 // plan (ya da vercel.json'da maxDuration ayarı) gerekebilir.
 export const maxDuration = 60;
+// Trendyol, ABD datacenter IP'lerinden gelen istekleri bot sanıp 403 ile
+// reddedebiliyor; fonksiyonu Türkiye'ye en yakın Vercel bölgesine sabitliyoruz.
+export const preferredRegion = "fra1";
 
 const FRESH_WINDOW_MS = 60 * 60 * 1000; // 1 saat
 const NOT_FOUND_MESSAGE =
