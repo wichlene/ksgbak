@@ -1,9 +1,8 @@
 import { pickUserAgent } from "./user-agents";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
-// Route toplamda en fazla 3 sıralı dış istek yapabilir (trendyol + cimri +
-// akakce); her biri en fazla bu kadar sürsün ki /api/track'in 60sn'lik
-// maxDuration sınırını aşmasın. ScraperAPI zor sitelerde 15-20sn sürebiliyor.
+// Route toplamda birkaç sıralı dış istek yapabilir; her biri en fazla bu kadar
+// sürsün ki /api/track'in 60sn'lik maxDuration sınırını aşmasın.
 const PROXY_TIMEOUT_MS = 20_000;
 
 export class FetchHtmlError extends Error {
@@ -17,33 +16,50 @@ export class FetchHtmlError extends Error {
   }
 }
 
+export interface ScraperOptions {
+  /** Sayfayı headless tarayıcıda çalıştır (JS ile render edilen içerik için). */
+  render?: boolean;
+  /** Residential proxy havuzu — sert bot korumaları için (daha fazla kredi harcar). */
+  premium?: boolean;
+  /** Coğrafi hedefleme. null verilirse hiç gönderilmez. */
+  countryCode?: string | null;
+  timeoutMs?: number;
+}
+
 /**
  * Trendyol/cimri/akakce doğrudan sunucu isteklerini (gerçek tarayıcı olmayan
- * her isteği, IP'den bağımsız olarak) 403 ile reddediyor — bunu ölçtük hem
- * Vercel'den hem farklı bir ev IP'sinden. SCRAPER_API_KEY tanımlıysa istekler
+ * her isteği, IP'den bağımsız olarak) 403 ile reddediyor — bunu hem Vercel'den
+ * hem farklı bir ev IP'sinden ölçtük. SCRAPER_API_KEY tanımlıysa istekler
  * ScraperAPI üzerinden (rotating proxy + tarayıcı benzeri parmak izi) atılır.
- * Key yoksa doğrudan fetch denenir (yerel geliştirmede yine 403 alınabilir,
- * bu beklenen bir durumdur).
  */
-function buildRequestUrl(url: string): string {
+function buildRequestUrl(url: string, opts: ScraperOptions): string {
   const apiKey = process.env.SCRAPER_API_KEY;
   if (!apiKey) return url;
 
   const proxyUrl = new URL("https://api.scraperapi.com/");
   proxyUrl.searchParams.set("api_key", apiKey);
   proxyUrl.searchParams.set("url", url);
-  proxyUrl.searchParams.set("country_code", "tr");
+
+  const country = opts.countryCode === undefined ? "tr" : opts.countryCode;
+  if (country) proxyUrl.searchParams.set("country_code", country);
+  if (opts.render) proxyUrl.searchParams.set("render", "true");
+  if (opts.premium) proxyUrl.searchParams.set("premium", "true");
+
   return proxyUrl.toString();
 }
 
 export async function fetchHtml(
   url: string,
-  timeoutMs?: number
+  options: ScraperOptions | number = {}
 ): Promise<string> {
+  // Geriye dönük uyumluluk: fetchHtml(url, 45_000) çağrıları da çalışsın.
+  const opts: ScraperOptions =
+    typeof options === "number" ? { timeoutMs: options } : options;
+
   const usingProxy = Boolean(process.env.SCRAPER_API_KEY);
-  const requestUrl = buildRequestUrl(url);
+  const requestUrl = buildRequestUrl(url, opts);
   const effectiveTimeout =
-    timeoutMs ?? (usingProxy ? PROXY_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
+    opts.timeoutMs ?? (usingProxy ? PROXY_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), effectiveTimeout);
