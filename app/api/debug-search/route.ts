@@ -177,10 +177,62 @@ async function runAttempt(attempt: Attempt, q: string) {
   }
 }
 
+/**
+ * Genel amaçlı: herhangi bir URL'i çekip verilen kelimelerin etrafındaki
+ * kesitleri döner. akakce'nin JS dosyasında grafik verisini veren endpoint'i
+ * aramak için kullanılıyor.
+ */
+async function grepUrl(rawUrl: string, terms: string[], opts: { premium: boolean; render: boolean }) {
+  const started = Date.now();
+  const text = await fetchHtml(rawUrl, {
+    premium: opts.premium,
+    render: opts.render,
+    countryCode: opts.premium ? "tr" : null,
+    timeoutMs: 50_000,
+  });
+
+  const hits: Record<string, string[]> = {};
+  for (const term of terms) {
+    const found: string[] = [];
+    const re = new RegExp(`.{0,120}${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.{0,160}`, "gi");
+    let m: RegExpExecArray | null;
+    let count = 0;
+    while ((m = re.exec(text)) && count < 6) {
+      found.push(m[0]);
+      count++;
+    }
+    if (found.length) hits[term] = found;
+  }
+
+  return { rawUrl, ms: Date.now() - started, length: text.length, hits };
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q");
   const productUrl = searchParams.get("productUrl");
+  const rawUrl = searchParams.get("rawUrl");
+
+  if (rawUrl) {
+    const terms = (searchParams.get("grep") || "hpd,grafik,graph,chart,fiyat-analiz,priceHistory,/gr/,akamaized,canvas_v8,pf_w")
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    try {
+      const result = await grepUrl(rawUrl, terms, {
+        premium: searchParams.get("premium") !== "0",
+        render: searchParams.get("render") === "1",
+      });
+      return NextResponse.json({ mode: "grep", ...result });
+    } catch (err) {
+      return NextResponse.json({
+        mode: "grep",
+        rawUrl,
+        error: err instanceof Error ? err.message : String(err),
+        status: err instanceof FetchHtmlError ? err.status ?? null : null,
+      });
+    }
+  }
 
   // İkinci aşama: elimizde bir ürün sayfası URL'i varsa, fiyat geçmişinin o
   // sayfada nasıl durduğunu incele.
