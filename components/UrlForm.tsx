@@ -78,8 +78,7 @@ export function UrlForm() {
       {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
       {loading && (
         <p className="mt-3 text-sm text-gray-500">
-          Trendyol, cimri.com ve akakce.com taranıyor, bu birkaç saniye
-          sürebilir…
+          Ürün ve fiyat geçmişi aranıyor, bu birkaç saniye sürebilir…
         </p>
       )}
     </form>

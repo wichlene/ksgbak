@@ -50,8 +50,8 @@ export function BackfillTrigger({ productId }: { productId: string }) {
   return (
     <p className="text-xs text-gray-500">
       {state === "running"
-        ? "İnternet Arşivi'nde geçmiş fiyatlar aranıyor, bu bir dakika sürebilir…"
-        : "İnternet Arşivi'nde bu ürüne ait eski kayıt bulunamadı."}
+        ? "Geçmiş fiyatlar taranıyor, bu bir dakika sürebilir…"
+        : "Bu ürün için geçmişe dönük fiyat kaydı bulunamadı. Bugünden itibaren fiyatını her gün kaydediyoruz."}
     </p>
   );
 }

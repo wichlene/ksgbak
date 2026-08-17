@@ -7,8 +7,20 @@ export function formatPriceTRY(value: number | null | undefined): string {
   }).format(value);
 }
 
-export function formatDateShort(iso: string): string {
-  return new Date(iso).toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
+export function formatDateShort(iso: string | number): string {
+  return new Date(iso).toLocaleDateString("tr-TR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/** Zaman ekseni etiketi: "Ağu 26" */
+export function formatMonthShort(value: string | number): string {
+  return new Date(value).toLocaleDateString("tr-TR", {
+    month: "short",
+    year: "2-digit",
+  });
 }
 
 export function formatSoldCount(

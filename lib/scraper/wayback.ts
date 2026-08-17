@@ -17,8 +17,11 @@ const CDX_ENDPOINT = "https://web.archive.org/cdx/search/cdx";
 const SNAPSHOT_TIMEOUT_MS = 15_000;
 const CDX_TIMEOUT_MS = 20_000;
 
-/** Aynı anda kaç snapshot çekilsin (archive.org'u boğmadan hızlı kalmak için). */
-const CONCURRENCY = 5;
+/**
+ * Aynı anda kaç snapshot çekilsin. 12-24 snapshot'ın 60sn'lik fonksiyon
+ * sınırına sığması için yeterince paralel, archive.org'u boğmayacak kadar az.
+ */
+const CONCURRENCY = 8;
 
 export interface WaybackOptions {
   /** En fazla kaç snapshot işlensin. */

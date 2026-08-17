@@ -59,8 +59,9 @@ export async function POST(request: Request) {
     if (product.source_url?.includes("akakce.com")) {
       points.push(
         ...(await fetchWaybackPriceHistory(product.source_url, {
-          yearsBack: 2,
-          maxSnapshots: 24,
+          // Son 1 yıl, ayda bir nokta (CDX collapse=timestamp:6) + biraz pay
+          yearsBack: 1,
+          maxSnapshots: 16,
           extractPrice: extractAkakcePriceFromHtml,
           deadline,
         }))
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
     if (Date.now() < deadline) {
       points.push(
         ...(await fetchWaybackPriceHistory(product.trendyol_url, {
-          yearsBack: 2,
+          yearsBack: 1,
           maxSnapshots: 12,
           deadline,
         }))

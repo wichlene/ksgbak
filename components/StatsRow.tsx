@@ -1,7 +1,13 @@
 import type { Product } from "@/lib/types";
 import { formatPriceTRY } from "@/lib/format";
 
-export function StatsRow({ product }: { product: Product }) {
+export function StatsRow({
+  product,
+  pointCount,
+}: {
+  product: Product;
+  pointCount: number;
+}) {
   const stats = [
     { label: "Güncel Fiyat", value: formatPriceTRY(product.current_price) },
     {
@@ -14,7 +20,7 @@ export function StatsRow({ product }: { product: Product }) {
       value: formatPriceTRY(product.highest_price),
       accent: "text-red-400",
     },
-    { label: "Veri Kaynağı", value: sourceLabel(product.price_source) },
+    { label: "Fiyat Kaydı", value: `${pointCount} kayıt` },
   ];
 
   return (
@@ -29,17 +35,4 @@ export function StatsRow({ product }: { product: Product }) {
       ))}
     </div>
   );
-}
-
-function sourceLabel(source: Product["price_source"]): string {
-  switch (source) {
-    case "cimri":
-      return "cimri.com";
-    case "akakce":
-      return "akakce.com";
-    case "wayback":
-      return "İnternet Arşivi";
-    default:
-      return "Kendi takibimiz";
-  }
 }

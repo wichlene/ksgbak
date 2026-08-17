@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { ProductCard } from "@/components/ProductCard";
 import { PriceChart } from "@/components/PriceChart";
 import { StatsRow } from "@/components/StatsRow";
-import { AkakceGraph } from "@/components/AkakceGraph";
+import { LongTermGraph } from "@/components/LongTermGraph";
 import { BackfillTrigger } from "@/components/BackfillTrigger";
 import type { PriceHistoryPoint, Product } from "@/lib/types";
 
@@ -27,18 +27,10 @@ export default async function ProductPage({ params }: PageProps) {
           {!product.wayback_backfilled_at && (
             <BackfillTrigger productId={product.id} />
           )}
-          <StatsRow product={product} />
-          <AkakceGraph product={product} />
+          <StatsRow product={product} pointCount={history.length} />
+          <LongTermGraph product={product} />
         </div>
       </div>
-
-      {product.status === "tracking" && (
-        <p className="mt-6 rounded-xl border border-white/10 bg-bg-card p-4 text-sm text-gray-400">
-          Bu ürün için karşılaştırma sitelerinde hazır fiyat geçmişi
-          bulunamadı. Ürünü izlemeye aldık, her gün otomatik olarak fiyatını
-          kontrol edip buraya ekleyeceğiz.
-        </p>
-      )}
     </main>
   );
 }

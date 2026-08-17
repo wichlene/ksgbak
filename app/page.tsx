@@ -11,8 +11,8 @@ export default function HomePage() {
           Trendyol ürününün fiyat geçmişini gör
         </h1>
         <p className="mx-auto max-w-lg text-gray-400">
-          Ürün linkini yapıştır, cimri.com ve akakce.com&apos;daki fiyat
-          geçmişini bulalım. Bulamazsak biz izlemeye alırız.
+          Ürün linkini yapıştır, geçmiş fiyatlarını ay ay grafikte görelim.
+          Kaydı yoksa ürünü izlemeye alıp fiyatını her gün takip ederiz.
         </p>
       </div>
 

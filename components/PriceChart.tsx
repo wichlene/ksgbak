@@ -12,7 +12,7 @@ import {
   type TooltipContentProps,
 } from "recharts";
 import type { PriceHistoryPoint } from "@/lib/types";
-import { formatDateShort, formatPriceTRY } from "@/lib/format";
+import { formatDateShort, formatMonthShort, formatPriceTRY } from "@/lib/format";
 
 const ACCENT = "#f27a1a";
 const GRID = "#232733";
@@ -21,7 +21,8 @@ const LOW = "#22c55e";
 const HIGH = "#ef4444";
 
 interface ChartPoint {
-  date: string;
+  /** epoch ms — eksenin gerçek zaman ölçeğinde olması için sayı tutuluyor */
+  ts: number;
   price: number;
 }
 
@@ -34,10 +35,9 @@ export function PriceChart({ history }: { history: PriceHistoryPoint[] }) {
     );
   }
 
-  const data: ChartPoint[] = history.map((p) => ({
-    date: p.recorded_at,
-    price: p.price,
-  }));
+  const data: ChartPoint[] = history
+    .map((p) => ({ ts: new Date(p.recorded_at).getTime(), price: p.price }))
+    .sort((a, b) => a.ts - b.ts);
 
   const minPoint = data.reduce((a, b) => (b.price < a.price ? b : a));
   const maxPoint = data.reduce((a, b) => (b.price > a.price ? b : a));
@@ -53,12 +53,17 @@ export function PriceChart({ history }: { history: PriceHistoryPoint[] }) {
             </linearGradient>
           </defs>
           <CartesianGrid stroke={GRID} vertical={false} />
+          {/* Zaman ölçekli eksen: noktalar arasındaki gerçek zaman farkı
+              korunur, etiketler ay bazında gösterilir. */}
           <XAxis
-            dataKey="date"
-            tickFormatter={formatDateShort}
+            dataKey="ts"
+            type="number"
+            scale="time"
+            domain={["dataMin", "dataMax"]}
+            tickFormatter={formatMonthShort}
             stroke={GRID}
             tick={{ fill: AXIS_TEXT, fontSize: 12 }}
-            minTickGap={32}
+            minTickGap={40}
           />
           <YAxis
             tickFormatter={(v: number) => `₺${Math.round(v)}`}
@@ -78,7 +83,7 @@ export function PriceChart({ history }: { history: PriceHistoryPoint[] }) {
             activeDot={{ r: 5, fill: ACCENT, stroke: "#0b0d12", strokeWidth: 2 }}
           />
           <ReferenceDot
-            x={minPoint.date}
+            x={minPoint.ts}
             y={minPoint.price}
             r={5}
             fill={LOW}
@@ -87,7 +92,7 @@ export function PriceChart({ history }: { history: PriceHistoryPoint[] }) {
             label={{ value: "En düşük", position: "bottom", fill: LOW, fontSize: 11 }}
           />
           <ReferenceDot
-            x={maxPoint.date}
+            x={maxPoint.ts}
             y={maxPoint.price}
             r={5}
             fill={HIGH}
@@ -107,7 +112,7 @@ function ChartTooltip({ active, payload }: TooltipContentProps) {
 
   return (
     <div className="rounded-lg border border-white/10 bg-bg-soft px-3 py-2 text-xs shadow-xl">
-      <div className="text-gray-400">{formatDateShort(point.date)}</div>
+      <div className="text-gray-400">{formatDateShort(point.ts)}</div>
       <div className="mt-1 font-semibold text-gray-100">
         {formatPriceTRY(point.price)}
       </div>
