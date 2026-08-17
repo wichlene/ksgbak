@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { fetchWaybackPriceHistory } from "@/lib/scraper/wayback";
+import { extractAkakcePriceFromHtml } from "@/lib/scraper/akakce";
 import { insertPriceHistoryPoints } from "@/lib/db/products";
 import type { Product } from "@/lib/types";
 
@@ -41,20 +42,50 @@ export async function POST(request: Request) {
   if (!product) {
     return NextResponse.json({ error: "Ürün bulunamadı" }, { status: 404 });
   }
-  if (product.wayback_backfilled_at) {
+  // ?force=1 ile daha önce taranmış bir ürün tekrar taranabilir (test/geliştirme).
+  const force = new URL(request.url).searchParams.get("force") === "1";
+  if (product.wayback_backfilled_at && !force) {
     return NextResponse.json({ status: "already_done", added: 0 });
   }
 
+  // Fonksiyonun 60sn sınırını aşmamak için toplam bütçe.
+  const deadline = Date.now() + 45_000;
+
   try {
-    const points = await fetchWaybackPriceHistory(product.trendyol_url, {
-      yearsBack: 2,
-      maxSnapshots: 24,
-    });
+    const points: Awaited<ReturnType<typeof fetchWaybackPriceHistory>> = [];
+
+    // 1) Öncelik akakce sayfası: SEO ağırlıklı olduğu için archive.org'da çok
+    //    daha yoğun arşivleniyor ve fiyat sayfada sayı olarak duruyor.
+    if (product.source_url?.includes("akakce.com")) {
+      points.push(
+        ...(await fetchWaybackPriceHistory(product.source_url, {
+          yearsBack: 2,
+          maxSnapshots: 24,
+          extractPrice: extractAkakcePriceFromHtml,
+          deadline,
+        }))
+      );
+    }
+
+    // 2) Trendyol sayfasının arşiv kopyaları (varsa) — genelde daha seyrek.
+    if (Date.now() < deadline) {
+      points.push(
+        ...(await fetchWaybackPriceHistory(product.trendyol_url, {
+          yearsBack: 2,
+          maxSnapshots: 12,
+          deadline,
+        }))
+      );
+    }
 
     if (points.length > 0) {
+      const sorted = [...points].sort(
+        (a, b) =>
+          new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime()
+      );
       await insertPriceHistoryPoints(
         product.id,
-        points.map((p) => ({ price: p.price, recordedAt: p.recordedAt })),
+        sorted.map((p) => ({ price: p.price, recordedAt: p.recordedAt })),
         "wayback"
       );
     }

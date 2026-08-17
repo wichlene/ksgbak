@@ -25,6 +25,13 @@ export interface WaybackOptions {
   maxSnapshots?: number;
   /** Kaç yıl geriye gidilsin. */
   yearsBack?: number;
+  /**
+   * Arşiv kopyasından fiyatı okuyan fonksiyon. Varsayılan Trendyol; akakce
+   * sayfaları için extractAkakcePriceFromHtml verilir.
+   */
+  extractPrice?: (html: string) => number | null;
+  /** Bu zamana kadar bitmezse kalan snapshot'lar atlanır (epoch ms). */
+  deadline?: number;
 }
 
 /**
@@ -74,7 +81,8 @@ export async function listSnapshots(
  */
 async function fetchSnapshotPrice(
   timestamp: string,
-  url: string
+  url: string,
+  extractPrice: (html: string) => number | null
 ): Promise<ScrapedPricePoint | null> {
   try {
     const html = await fetchHtml(
@@ -82,7 +90,7 @@ async function fetchSnapshotPrice(
       { direct: true, timeoutMs: SNAPSHOT_TIMEOUT_MS }
     );
 
-    const price = extractPriceFromHtml(html);
+    const price = extractPrice(html);
     if (price == null) return null;
 
     return { price, recordedAt: parseCdxTimestamp(timestamp) };
@@ -100,15 +108,18 @@ export async function fetchWaybackPriceHistory(
   url: string,
   opts: WaybackOptions = {}
 ): Promise<ScrapedPricePoint[]> {
+  const extractPrice = opts.extractPrice ?? extractPriceFromHtml;
   const timestamps = await listSnapshots(url, opts);
   if (timestamps.length === 0) return [];
 
   const points: ScrapedPricePoint[] = [];
 
   for (let i = 0; i < timestamps.length; i += CONCURRENCY) {
+    if (opts.deadline && Date.now() > opts.deadline) break;
+
     const batch = timestamps.slice(i, i + CONCURRENCY);
     const settled = await Promise.all(
-      batch.map((ts) => fetchSnapshotPrice(ts, url))
+      batch.map((ts) => fetchSnapshotPrice(ts, url, extractPrice))
     );
     for (const p of settled) {
       if (p) points.push(p);

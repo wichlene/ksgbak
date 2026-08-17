@@ -64,6 +64,57 @@ function readDateField(text: string, field: string): string | null {
 }
 
 /**
+ * Bir akakce ürün sayfası HTML'inden en düşük satıcı fiyatını çıkarır.
+ *
+ * archive.org'daki eski akakce kopyalarında da kullanıldığı için sayfa yapısının
+ * yıllar içindeki farklı sürümlerini sırayla dener: güncel gömülü JSON, eski
+ * JSON biçimi, schema.org meta alanları ve son çare olarak açıklama metnindeki
+ * "... fiyatları 48.299,00 TL'den başlayan" kalıbı.
+ */
+export function extractAkakcePriceFromHtml(rawHtml: string): number | null {
+  const text = rawHtml.replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+
+  // 1) Güncel biçim: "minOfSortPrice":[0,48299]
+  const wrapped = readNumberField(text, "minOfSortPrice");
+  if (wrapped) return wrapped;
+
+  // 2) Eski/sade JSON biçimi: "minOfSortPrice":48299
+  const plain = text.match(/"minOfSortPrice"\s*:\s*([\d.]+)/);
+  if (plain) {
+    const v = parseFloat(plain[1]);
+    if (Number.isFinite(v) && v > 0) return v;
+  }
+
+  // 3) schema.org fiyat alanları
+  const meta =
+    text.match(/itemprop="price"\s+content="([\d.,]+)"/i) ??
+    text.match(/"price"\s*:\s*"?([\d.]+)"?/);
+  if (meta) {
+    const v = parseTrPrice(meta[1]);
+    if (v) return v;
+  }
+
+  // 4) Açıklama metni: "... fiyatları 48.299,00 TL'den başlayan ..."
+  const desc = text.match(/fiyatlar[ıi]\s+([\d.,]+)\s*TL/i);
+  if (desc) {
+    const v = parseTrPrice(desc[1]);
+    if (v) return v;
+  }
+
+  return null;
+}
+
+/** "48.299,00" -> 48299 ; "48299.00" -> 48299 */
+function parseTrPrice(raw: string): number | null {
+  let s = raw.trim();
+  if (s.includes(",")) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  }
+  const v = parseFloat(s);
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/**
  * akakce'nin uzun vadeli fiyat grafiği hazır bir görsel olarak sayfaya gömülü:
  * style="background:url(https://akakce-g.akamaized.net/282674948:4829900:17.2)"
  */
