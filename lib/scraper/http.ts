@@ -3,8 +3,8 @@ import { pickUserAgent } from "./user-agents";
 const DEFAULT_TIMEOUT_MS = 10_000;
 // Route toplamda en fazla 3 sıralı dış istek yapabilir (trendyol + cimri +
 // akakce); her biri en fazla bu kadar sürsün ki /api/track'in 60sn'lik
-// maxDuration sınırını aşmasın.
-const PROXY_TIMEOUT_MS = 15_000;
+// maxDuration sınırını aşmasın. ScraperAPI zor sitelerde 15-20sn sürebiliyor.
+const PROXY_TIMEOUT_MS = 20_000;
 
 export class FetchHtmlError extends Error {
   constructor(

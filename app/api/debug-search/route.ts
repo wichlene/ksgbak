@@ -34,7 +34,7 @@ export async function GET(request: Request) {
 
   try {
     const searchUrl = config.search + encodeURIComponent(q);
-    const searchHtml = await fetchHtml(searchUrl);
+    const searchHtml = await fetchHtml(searchUrl, 45_000);
     const $ = cheerio.load(searchHtml);
 
     const allLinks = $("a[href]")
@@ -56,7 +56,7 @@ export async function GET(request: Request) {
     let productPageResult: unknown = null;
     if (bestUrl) {
       try {
-        const productHtml = await fetchHtml(bestUrl);
+        const productHtml = await fetchHtml(bestUrl, 45_000);
         const blobs = extractJsonBlobs(productHtml);
         const historyFound = blobs
           .map((b) => findPriceHistoryArray(b))
