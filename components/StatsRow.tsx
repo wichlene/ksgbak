@@ -37,6 +37,8 @@ function sourceLabel(source: Product["price_source"]): string {
       return "cimri.com";
     case "akakce":
       return "akakce.com";
+    case "wayback":
+      return "İnternet Arşivi";
     default:
       return "Kendi takibimiz";
   }

@@ -1,4 +1,4 @@
-export type PriceSource = "cimri" | "akakce" | "internal";
+export type PriceSource = "cimri" | "akakce" | "internal" | "wayback";
 export type ProductStatus = "active" | "tracking" | "not_found";
 
 export interface Product {
@@ -19,6 +19,8 @@ export interface Product {
   source_url: string | null;
   /** akakce'nin hazır ürettiği uzun vadeli fiyat grafiği görseli. */
   graph_image_url: string | null;
+  /** archive.org taraması yapıldıysa zamanı; tekrar taramamak için. */
+  wayback_backfilled_at: string | null;
   last_checked_at: string | null;
   created_at: string;
   updated_at: string;

@@ -4,6 +4,7 @@ import { ProductCard } from "@/components/ProductCard";
 import { PriceChart } from "@/components/PriceChart";
 import { StatsRow } from "@/components/StatsRow";
 import { AkakceGraph } from "@/components/AkakceGraph";
+import { BackfillTrigger } from "@/components/BackfillTrigger";
 import type { PriceHistoryPoint, Product } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,9 @@ export default async function ProductPage({ params }: PageProps) {
 
         <div className="flex flex-col gap-4">
           <PriceChart history={history} />
+          {!product.wayback_backfilled_at && (
+            <BackfillTrigger productId={product.id} />
+          )}
           <StatsRow product={product} />
           <AkakceGraph product={product} />
         </div>
@@ -30,7 +34,7 @@ export default async function ProductPage({ params }: PageProps) {
 
       {product.status === "tracking" && (
         <p className="mt-6 rounded-xl border border-white/10 bg-bg-card p-4 text-sm text-gray-400">
-          Bu ürün için cimri.com ve akakce.com&apos;da fiyat geçmişi
+          Bu ürün için karşılaştırma sitelerinde hazır fiyat geçmişi
           bulunamadı. Ürünü izlemeye aldık, her gün otomatik olarak fiyatını
           kontrol edip buraya ekleyeceğiz.
         </p>

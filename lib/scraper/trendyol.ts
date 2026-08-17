@@ -12,6 +12,42 @@ export function parseTrendyolProductId(url: string): string | null {
   return match ? match[1] : null;
 }
 
+/**
+ * Bir Trendyol ürün sayfası HTML'inden satış fiyatını çıkarır.
+ *
+ * Trendyol'un embedded state'i hangi script değişkeni altında olursa olsun
+ * "discountedPrice"/"sellingPrice" key'leri sabit kalıyor, bu yüzden state
+ * script'inin adı değişse bile bu regex'ler çalışıyor. Aynı fonksiyon
+ * archive.org'dan gelen eski sayfa kopyalarında da kullanılıyor; eski
+ * sürümlerde fiyat meta tag'inde durabildiği için o da denenir.
+ */
+export function extractPriceFromHtml(html: string): number | null {
+  const jsonPatterns = [
+    /"discountedPrice"\s*:\s*\{\s*"value"\s*:\s*([\d.]+)/,
+    /"sellingPrice"\s*:\s*\{\s*"value"\s*:\s*([\d.]+)/,
+    /"discountedPrice"\s*:\s*([\d.]+)/,
+    /"sellingPrice"\s*:\s*([\d.]+)/,
+  ];
+
+  for (const pattern of jsonPatterns) {
+    const m = html.match(pattern);
+    if (m) {
+      const value = parseFloat(m[1]);
+      if (Number.isFinite(value) && value > 0) return value;
+    }
+  }
+
+  const metaMatch =
+    html.match(/property="product:price:amount"\s+content="([\d.,]+)"/i) ??
+    html.match(/itemprop="price"\s+content="([\d.,]+)"/i);
+  if (metaMatch) {
+    const value = parseFloat(metaMatch[1].replace(",", "."));
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+
+  return null;
+}
+
 export function isTrendyolUrl(url: string): boolean {
   try {
     const { hostname } = new URL(url);
@@ -73,19 +109,9 @@ export async function fetchTrendyolProduct(
     }
   }
 
-  // 2) Ham HTML üzerinde doğrudan fiyat alanı arama. Trendyol'un embedded
-  // state'i hangi değişken/script altında olursa olsun "discountedPrice"/
-  // "sellingPrice" key'leri sabit kalıyor gibi görünüyor, bu yüzden state
-  // script'i bulunamasa bile bu regex'ler çoğu zaman çalışır.
+  // 2) Ham HTML üzerinde doğrudan fiyat alanı arama.
   if (currentPrice == null) {
-    const discountedMatch = html.match(
-      /"discountedPrice"\s*:\s*\{\s*"value"\s*:\s*([\d.]+)/
-    );
-    const sellingMatch = html.match(
-      /"sellingPrice"\s*:\s*\{\s*"value"\s*:\s*([\d.]+)/
-    );
-    const raw = discountedMatch?.[1] ?? sellingMatch?.[1] ?? null;
-    currentPrice = raw ? parseFloat(raw) : null;
+    currentPrice = extractPriceFromHtml(html);
   }
 
   // 3) OpenGraph / meta tag fallback (isim, görsel, fiyat)

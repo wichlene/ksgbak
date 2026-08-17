@@ -23,6 +23,11 @@ export interface ScraperOptions {
   premium?: boolean;
   /** Coğrafi hedefleme. null verilirse hiç gönderilmez. */
   countryCode?: string | null;
+  /**
+   * Proxy'yi tamamen atla. archive.org gibi bot koruması olmayan kaynaklarda
+   * kullanılır; hem daha hızlı hem de ScraperAPI kredisi harcamaz.
+   */
+  direct?: boolean;
   timeoutMs?: number;
 }
 
@@ -34,7 +39,7 @@ export interface ScraperOptions {
  */
 function buildRequestUrl(url: string, opts: ScraperOptions): string {
   const apiKey = process.env.SCRAPER_API_KEY;
-  if (!apiKey) return url;
+  if (!apiKey || opts.direct) return url;
 
   const proxyUrl = new URL("https://api.scraperapi.com/");
   proxyUrl.searchParams.set("api_key", apiKey);
@@ -56,7 +61,7 @@ export async function fetchHtml(
   const opts: ScraperOptions =
     typeof options === "number" ? { timeoutMs: options } : options;
 
-  const usingProxy = Boolean(process.env.SCRAPER_API_KEY);
+  const usingProxy = Boolean(process.env.SCRAPER_API_KEY) && !opts.direct;
   const requestUrl = buildRequestUrl(url, opts);
   const effectiveTimeout =
     opts.timeoutMs ?? (usingProxy ? PROXY_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
