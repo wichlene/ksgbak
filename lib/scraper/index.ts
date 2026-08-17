@@ -12,8 +12,13 @@ export interface TrackResult {
 }
 
 /**
- * Ana orkestrasyon: Trendyol'dan ürün bilgisini çeker, sonra sırasıyla
- * cimri.com -> akakce.com'dan fiyat geçmişi aramaya çalışır.
+ * Ana orkestrasyon: Trendyol'dan ürün bilgisini çeker, sonra fiyat geçmişi için
+ * önce akakce.com'u, olmazsa cimri.com'u dener.
+ *
+ * Sıra ölçüme dayalı: akakce'ye ScraperAPI premium proxy ile ~4sn'de
+ * ulaşılabiliyor ve sayfası sunucu tarafında render ediliyor; cimri ise ağır
+ * bir JS uygulaması ve proxy üzerinden HTTP 500 veriyor.
+ *
  * İkisinde de bulunamazsa history=null döner; çağıran taraf bunu
  * "izlemeye alındı" (status=tracking) olarak işlemeli.
  */
@@ -26,15 +31,46 @@ export async function trackTrendyolProduct(url: string): Promise<TrackResult> {
 
   let history: PriceHistoryResult | null = null;
 
-  if (productInfo.name) {
-    history = await tryOrNull(() => scrapeCimriPriceHistory(productInfo.name!));
+  const searchName = buildSearchQuery(productInfo.name, productInfo.brand);
+  if (searchName) {
+    history = await tryOrNull(() => scrapeAkakcePriceHistory(searchName));
 
     if (!history) {
-      history = await tryOrNull(() => scrapeAkakcePriceHistory(productInfo.name!));
+      history = await tryOrNull(() => scrapeCimriPriceHistory(searchName));
     }
   }
 
   return { productInfo, history };
+}
+
+/**
+ * Trendyol ürün başlıkları arama için fazla uzun oluyor ("... - Fiyatı,
+ * Yorumları" gibi kuyruklar, ölçü/renk detayları). Karşılaştırma sitelerinde
+ * sonuç bulunabilmesi için başlığı kısaltıp sadeleştirir.
+ */
+export function buildSearchQuery(
+  name: string | null,
+  brand: string | null
+): string | null {
+  if (!name) return null;
+
+  let cleaned = name
+    // "- Fiyatı, Yorumları, Özellikleri" gibi Trendyol kuyruklarını at
+    .split(/\s+-\s+fiyat/i)[0]
+    .replace(/\b(fiyat[ıi]|yorumlar[ıi]|özellikleri|trendyol)\b/gi, " ")
+    .replace(/[^\p{L}\p{N}\s.]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // İlk 8 kelime marka + model için genelde yeterli, fazlası aramayı daraltıyor
+  const words = cleaned.split(" ").filter(Boolean).slice(0, 8);
+  cleaned = words.join(" ");
+
+  if (brand && !cleaned.toLowerCase().includes(brand.toLowerCase())) {
+    cleaned = `${brand} ${cleaned}`.trim();
+  }
+
+  return cleaned.length > 2 ? cleaned : null;
 }
 
 async function tryOrNull<T>(fn: () => Promise<T | null>): Promise<T | null> {
