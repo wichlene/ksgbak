@@ -41,6 +41,8 @@ export async function fetchTrendyolProduct(
   let currentPrice: number | null = null;
 
   // 1) Sayfaya gömülü state JSON'u (script tag içinde window.__PRODUCT_DETAIL_APP_INITIAL_STATE__)
+  // Trendyol bu değişken adını zaman zaman değiştiriyor; bulunamazsa 2. ve 3.
+  // yöntemler devreye girer.
   const stateScript = $("script")
     .toArray()
     .map((el) => $(el).html() || "")
@@ -66,19 +68,34 @@ export async function fetchTrendyolProduct(
             null;
         }
       } catch {
-        // state JSON parse edilemedi, meta tag fallback'e düş
+        // state JSON parse edilemedi, diğer yöntemlere düş
       }
     }
   }
 
-  // 2) OpenGraph / meta tag fallback
+  // 2) Ham HTML üzerinde doğrudan fiyat alanı arama. Trendyol'un embedded
+  // state'i hangi değişken/script altında olursa olsun "discountedPrice"/
+  // "sellingPrice" key'leri sabit kalıyor gibi görünüyor, bu yüzden state
+  // script'i bulunamasa bile bu regex'ler çoğu zaman çalışır.
+  if (currentPrice == null) {
+    const discountedMatch = html.match(
+      /"discountedPrice"\s*:\s*\{\s*"value"\s*:\s*([\d.]+)/
+    );
+    const sellingMatch = html.match(
+      /"sellingPrice"\s*:\s*\{\s*"value"\s*:\s*([\d.]+)/
+    );
+    const raw = discountedMatch?.[1] ?? sellingMatch?.[1] ?? null;
+    currentPrice = raw ? parseFloat(raw) : null;
+  }
+
+  // 3) OpenGraph / meta tag fallback (isim, görsel, fiyat)
   if (!name) {
     name = $('meta[property="og:title"]').attr("content") ?? $("title").text() ?? null;
   }
   if (!imageUrl) {
     imageUrl = $('meta[property="og:image"]').attr("content") ?? null;
   }
-  if (!currentPrice) {
+  if (currentPrice == null) {
     const metaPrice =
       $('meta[property="product:price:amount"]').attr("content") ??
       $('[itemprop="price"]').attr("content") ??
