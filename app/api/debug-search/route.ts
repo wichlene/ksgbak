@@ -182,29 +182,45 @@ async function runAttempt(attempt: Attempt, q: string) {
  * kesitleri döner. akakce'nin JS dosyasında grafik verisini veren endpoint'i
  * aramak için kullanılıyor.
  */
-async function grepUrl(rawUrl: string, terms: string[], opts: { premium: boolean; render: boolean }) {
+async function grepUrl(
+  rawUrl: string,
+  terms: string[],
+  opts: { premium: boolean; render: boolean; before?: number; after?: number }
+) {
   const started = Date.now();
-  const text = await fetchHtml(rawUrl, {
+  const raw = await fetchHtml(rawUrl, {
     premium: opts.premium,
     render: opts.render,
     countryCode: opts.premium ? "tr" : null,
     timeoutMs: 50_000,
   });
 
+  // akakce sayfa verisini HTML attribute içinde &quot;-escape edilmiş JSON
+  // olarak taşıyor; okunabilir olması için çözüyoruz.
+  const text = raw
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
+
+  const before = opts.before ?? 120;
+  const after = opts.after ?? 160;
+
   const hits: Record<string, string[]> = {};
   for (const term of terms) {
     const found: string[] = [];
-    const re = new RegExp(`.{0,120}${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.{0,160}`, "gi");
+    const re = new RegExp(
+      `.{0,${before}}${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.{0,${after}}`,
+      "gi"
+    );
     let m: RegExpExecArray | null;
     let count = 0;
-    while ((m = re.exec(text)) && count < 6) {
+    while ((m = re.exec(text)) && count < 4) {
       found.push(m[0]);
       count++;
     }
     if (found.length) hits[term] = found;
   }
 
-  return { rawUrl, ms: Date.now() - started, length: text.length, hits };
+  return { rawUrl, ms: Date.now() - started, length: raw.length, hits };
 }
 
 export async function GET(request: Request) {
@@ -222,6 +238,8 @@ export async function GET(request: Request) {
       const result = await grepUrl(rawUrl, terms, {
         premium: searchParams.get("premium") !== "0",
         render: searchParams.get("render") === "1",
+        before: Number(searchParams.get("before")) || 120,
+        after: Number(searchParams.get("after")) || 160,
       });
       return NextResponse.json({ mode: "grep", ...result });
     } catch (err) {
