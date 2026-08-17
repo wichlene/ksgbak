@@ -17,4 +17,10 @@ export interface PriceHistoryResult {
   source: "cimri" | "akakce";
   sourceUrl: string;
   points: ScrapedPricePoint[];
+  /**
+   * akakce uzun vadeli fiyat seyrini sayı olarak vermiyor, hazır bir grafik
+   * görseli olarak üretiyor. Sayısal geçmişimiz kısa olduğu için bu görseli de
+   * saklayıp kullanıcıya gösteriyoruz.
+   */
+  graphImageUrl?: string | null;
 }

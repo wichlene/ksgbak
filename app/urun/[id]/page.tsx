@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { ProductCard } from "@/components/ProductCard";
 import { PriceChart } from "@/components/PriceChart";
 import { StatsRow } from "@/components/StatsRow";
+import { AkakceGraph } from "@/components/AkakceGraph";
 import type { PriceHistoryPoint, Product } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ export default async function ProductPage({ params }: PageProps) {
         <div className="flex flex-col gap-4">
           <PriceChart history={history} />
           <StatsRow product={product} />
+          <AkakceGraph product={product} />
         </div>
       </div>
 

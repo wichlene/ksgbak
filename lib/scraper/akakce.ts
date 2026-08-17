@@ -1,14 +1,13 @@
 import * as cheerio from "cheerio";
 import { fetchHtml, type ScraperOptions } from "./http";
-import { extractJsonBlobs, findPriceHistoryArray } from "./extract-json";
 import { pickBestMatch, type LinkCandidate } from "./match";
-import type { PriceHistoryResult } from "./types";
+import type { PriceHistoryResult, ScrapedPricePoint } from "./types";
 
 const SEARCH_URL = "https://www.akakce.com/arama/?q=";
 
-// Ölçüm: akakce'ye ScraperAPI premium (residential) proxy ile ~4sn'de
-// ulaşılıyor, normal proxy ile ~17sn. cimri.com ise her iki ayarda da
-// HTTP 500 veriyor, bu yüzden akakce birincil kaynak.
+// Ölçüm: akakce'ye ScraperAPI premium (residential) proxy ile ~2-4sn'de
+// ulaşılıyor. cimri.com ise her ayarda HTTP 500 verdiği için akakce birincil
+// kaynak.
 const AKAKCE_FETCH_OPTIONS: ScraperOptions = {
   premium: true,
   timeoutMs: 20_000,
@@ -43,9 +42,45 @@ async function findAkakceProductUrl(productName: string): Promise<string | null>
 }
 
 /**
- * akakce.com ürün sayfasından fiyat geçmişini çeker.
- * Bulunamazsa null döner; çağıran taraf cimri'ye, o da olmazsa kendi
- * "internal" takibimize düşer.
+ * akakce ürün sayfası, sayfa verisini HTML attribute'ları içinde
+ * &quot;-escape edilmiş JSON olarak taşıyor. İlgili alanlar:
+ *   "lowestPrice1M":[0,44792.61]        -> son 1 ayın en düşük fiyatı
+ *   "lowestPriceDate1M":[0,"2026-07-21T00:00:00"]
+ *   "minOfSortPrice":[0,48299]          -> şu anki en düşük satıcı fiyatı
+ * Değerler Astro'nun [0, value] sarmalı içinde geliyor.
+ */
+function readNumberField(text: string, field: string): number | null {
+  const m = text.match(new RegExp(`"${field}"\\s*:\\s*\\[\\s*0\\s*,\\s*([\\d.]+)\\s*\\]`));
+  if (!m) return null;
+  const value = parseFloat(m[1]);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function readDateField(text: string, field: string): string | null {
+  const m = text.match(new RegExp(`"${field}"\\s*:\\s*\\[\\s*0\\s*,\\s*"([^"]+)"\\s*\\]`));
+  if (!m) return null;
+  const parsed = new Date(m[1]);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+/**
+ * akakce'nin uzun vadeli fiyat grafiği hazır bir görsel olarak sayfaya gömülü:
+ * style="background:url(https://akakce-g.akamaized.net/282674948:4829900:17.2)"
+ */
+function readGraphImageUrl(html: string): string | null {
+  const m = html.match(
+    /background:\s*url\((https:\/\/akakce-g\.akamaized\.net\/[^)\s]+)\)/i
+  );
+  return m ? m[1] : null;
+}
+
+/**
+ * akakce ürün sayfasından elde edilebilen gerçek fiyat geçmişi noktalarını çeker.
+ *
+ * ÖNEMLİ SINIR: akakce sayısal olarak yalnızca son 1 ayın en düşük fiyatını
+ * (tarihiyle birlikte) ve güncel satıcı fiyat aralığını açıyor. Daha uzun
+ * geçmiş yalnızca grafik görselinin içinde bulunuyor, bu yüzden onu da
+ * graphImageUrl olarak döndürüyoruz.
  */
 export async function scrapeAkakcePriceHistory(
   productName: string
@@ -53,69 +88,43 @@ export async function scrapeAkakcePriceHistory(
   const productUrl = await findAkakceProductUrl(productName);
   if (!productUrl) return null;
 
-  const html = await fetchHtml(productUrl, AKAKCE_FETCH_OPTIONS);
+  const rawHtml = await fetchHtml(productUrl, AKAKCE_FETCH_OPTIONS);
+  const text = rawHtml.replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 
-  const points = extractAkakceHistory(html);
-  if (points.length > 0) {
-    return { source: "akakce", sourceUrl: productUrl, points };
+  const points: ScrapedPricePoint[] = [];
+
+  const lowest1M = readNumberField(text, "lowestPrice1M");
+  const lowest1MDate = readDateField(text, "lowestPriceDate1M");
+  if (lowest1M && lowest1MDate) {
+    points.push({ price: lowest1M, recordedAt: lowest1MDate });
   }
 
-  // Genel JSON deep-search fallback'i
-  const blobs = extractJsonBlobs(html);
-  for (const blob of blobs) {
-    const raw = findPriceHistoryArray(blob);
-    if (raw && raw.length > 0) {
-      return {
-        source: "akakce",
-        sourceUrl: productUrl,
-        points: raw
-          .map((p) => ({ price: p.price, recordedAt: normalizeDate(p.date) }))
-          .filter((p) => Number.isFinite(p.price)),
-      };
-    }
+  const currentMin = readNumberField(text, "minOfSortPrice");
+  if (currentMin) {
+    points.push({ price: currentMin, recordedAt: new Date().toISOString() });
   }
 
-  return null;
+  const graphImageUrl = readGraphImageUrl(rawHtml);
+
+  if (points.length === 0 && !graphImageUrl) return null;
+
+  return {
+    source: "akakce",
+    sourceUrl: productUrl,
+    points: dedupeByDate(points),
+    graphImageUrl,
+  };
 }
 
-/**
- * akakce fiyat grafiğinin verisini sayfadaki inline script'lerden çıkarır.
- * Grafik verisi genelde [[timestamp, fiyat], ...] biçiminde bir dizi olarak
- * gömülü oluyor; timestamp saniye ya da milisaniye cinsinden olabiliyor.
- */
-export function extractAkakceHistory(
-  html: string
-): Array<{ price: number; recordedAt: string }> {
-  const pairArrayMatches = html.match(
-    /\[\s*\[\s*\d{9,13}\s*,\s*[\d.]+\s*\](?:\s*,\s*\[\s*\d{9,13}\s*,\s*[\d.]+\s*\])*\s*\]/g
+/** Aynı güne düşen noktalardan yalnızca birini tut (en düşük fiyatlısını). */
+function dedupeByDate(points: ScrapedPricePoint[]): ScrapedPricePoint[] {
+  const byDay = new Map<string, ScrapedPricePoint>();
+  for (const p of points) {
+    const day = p.recordedAt.slice(0, 10);
+    const existing = byDay.get(day);
+    if (!existing || p.price < existing.price) byDay.set(day, p);
+  }
+  return Array.from(byDay.values()).sort(
+    (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime()
   );
-  if (!pairArrayMatches) return [];
-
-  // En çok noktası olan diziyi seç (fiyat geçmişi grafiği en uzunudur)
-  let bestPoints: Array<{ price: number; recordedAt: string }> = [];
-
-  for (const raw of pairArrayMatches) {
-    try {
-      const parsed = JSON.parse(raw) as Array<[number, number]>;
-      const points = parsed
-        .map(([ts, price]) => ({
-          price,
-          recordedAt: new Date(ts < 1e12 ? ts * 1000 : ts).toISOString(),
-        }))
-        .filter((p) => Number.isFinite(p.price) && p.price > 0);
-
-      if (points.length > bestPoints.length) bestPoints = points;
-    } catch {
-      // parse edilemeyen diziyi yoksay
-    }
-  }
-
-  return bestPoints;
-}
-
-function normalizeDate(raw: string): string {
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime())
-    ? new Date().toISOString()
-    : parsed.toISOString();
 }

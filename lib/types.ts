@@ -15,6 +15,10 @@ export interface Product {
   sold_count: number | null;
   price_source: PriceSource;
   status: ProductStatus;
+  /** Fiyat geçmişinin alındığı karşılaştırma sitesindeki ürün sayfası. */
+  source_url: string | null;
+  /** akakce'nin hazır ürettiği uzun vadeli fiyat grafiği görseli. */
+  graph_image_url: string | null;
   last_checked_at: string | null;
   created_at: string;
   updated_at: string;

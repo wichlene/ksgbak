@@ -47,6 +47,21 @@ export async function insertProduct(input: NewProductInput): Promise<Product | n
   return data;
 }
 
+/** Fiyat geçmişi kaynağını ve akakce grafik görselini kaydeder. */
+export async function updateSourceInfo(
+  productId: string,
+  sourceUrl: string | null,
+  graphImageUrl: string | null
+): Promise<void> {
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("products")
+    .update({ source_url: sourceUrl, graph_image_url: graphImageUrl })
+    .eq("id", productId);
+
+  if (error) throw error;
+}
+
 export async function updateSoldCount(
   productId: string,
   soldCountRaw: string | null,

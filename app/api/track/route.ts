@@ -10,6 +10,7 @@ import {
   insertPriceHistoryPoints,
   insertProduct,
   updateSoldCount,
+  updateSourceInfo,
 } from "@/lib/db/products";
 import {
   getCachedTrackResult,
@@ -141,6 +142,14 @@ async function trackNewProduct(url: string) {
 
   if (productInfo.soldCount != null || productInfo.soldCountRaw) {
     await updateSoldCount(product.id, productInfo.soldCountRaw, productInfo.soldCount);
+  }
+
+  if (history) {
+    await updateSourceInfo(
+      product.id,
+      history.sourceUrl,
+      history.graphImageUrl ?? null
+    );
   }
 
   const finalProduct = (await findProductByUrl(url)) ?? product;
