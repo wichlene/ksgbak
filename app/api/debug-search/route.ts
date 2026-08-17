@@ -83,6 +83,65 @@ function inspectForHistory(html: string) {
   return { foundMarkers, pairArrays, snippets };
 }
 
+/**
+ * Fiyat geçmişi ilk HTML'de yoksa ayrı bir adresten (AJAX) geliyor demektir.
+ * Bu fonksiyon o adresi bulmak için sayfanın yapısını çıkarır: script src'leri,
+ * geçmiş/grafik ile ilgili linkler ve ürün ID'sinin geçtiği diğer yerler.
+ */
+function inspectPageStructure(html: string, productUrl: string) {
+  const $ = cheerio.load(html);
+
+  const scriptSrcs = $("script[src]")
+    .toArray()
+    .map((el) => $(el).attr("src") || "")
+    .filter(Boolean)
+    .slice(0, 25);
+
+  // "geçmiş", "grafik", "istatistik", "fiyat-gecmisi" içeren linkler
+  const historyLinks = $("a[href]")
+    .toArray()
+    .map((el) => ({ href: $(el).attr("href") || "", text: $(el).text().trim() }))
+    .filter((a) => /gecmis|geçmiş|grafik|istatistik|chart|history/i.test(a.href + " " + a.text))
+    .slice(0, 20);
+
+  // Ürün ID'si (URL'deki ",282674948.html" kısmı) sayfada başka nerelerde geçiyor?
+  const idMatch = productUrl.match(/,(\d+)\.html/);
+  const productId = idMatch ? idMatch[1] : null;
+  const idOccurrences: string[] = [];
+  if (productId) {
+    const re = new RegExp(`.{90}${productId}.{90}`, "g");
+    let m: RegExpExecArray | null;
+    let count = 0;
+    while ((m = re.exec(html)) && count < 12) {
+      idOccurrences.push(m[0]);
+      count++;
+    }
+  }
+
+  // Inline script'lerde geçen göreli/mutlak endpoint benzeri yollar
+  const inlineScripts = $("script:not([src])")
+    .toArray()
+    .map((el) => $(el).html() || "")
+    .join("\n");
+  const endpointCandidates = Array.from(
+    new Set(inlineScripts.match(/["'`](\/[a-z0-9_\-/.]{3,60}\?[^"'`]{0,80})["'`]/gi) || [])
+  ).slice(0, 25);
+
+  // data-* attribute'ları grafik verisini taşıyor olabilir
+  const dataAttrs = Array.from(
+    new Set(html.match(/data-[a-z-]*(?:chart|graph|price|hist|grafik|fiyat)[a-z-]*="[^"]{0,120}"/gi) || [])
+  ).slice(0, 15);
+
+  return {
+    productId,
+    scriptSrcs,
+    historyLinks,
+    idOccurrences,
+    endpointCandidates,
+    dataAttrs,
+  };
+}
+
 async function runAttempt(attempt: Attempt, q: string) {
   const started = Date.now();
   const searchUrl = attempt.searchUrl(q);
@@ -126,7 +185,7 @@ export async function GET(request: Request) {
   // İkinci aşama: elimizde bir ürün sayfası URL'i varsa, fiyat geçmişinin o
   // sayfada nasıl durduğunu incele.
   if (productUrl) {
-    const premium = searchParams.get("premium") === "1";
+    const premium = searchParams.get("premium") !== "0";
     const render = searchParams.get("render") === "1";
     const started = Date.now();
     try {
@@ -144,6 +203,7 @@ export async function GET(request: Request) {
         ms: Date.now() - started,
         htmlLength: html.length,
         ...inspectForHistory(html),
+        ...inspectPageStructure(html, productUrl),
       });
     } catch (err) {
       return NextResponse.json({
