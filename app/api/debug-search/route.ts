@@ -6,7 +6,7 @@ import { pickBestMatch, type LinkCandidate } from "@/lib/scraper/match";
 
 // GEÇİCİ teşhis endpoint'i — cimri/akakce arama + fiyat geçmişi tespiti için.
 // İş bitince silinecek.
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const SOURCES: Record<string, { search: string; linkPattern: RegExp }> = {
   cimri: {
@@ -55,18 +55,24 @@ export async function GET(request: Request) {
 
     let productPageResult: unknown = null;
     if (bestUrl) {
-      const productHtml = await fetchHtml(bestUrl);
-      const blobs = extractJsonBlobs(productHtml);
-      const historyFound = blobs
-        .map((b) => findPriceHistoryArray(b))
-        .find((r) => r != null);
+      try {
+        const productHtml = await fetchHtml(bestUrl);
+        const blobs = extractJsonBlobs(productHtml);
+        const historyFound = blobs
+          .map((b) => findPriceHistoryArray(b))
+          .find((r) => r != null);
 
-      productPageResult = {
-        htmlLength: productHtml.length,
-        jsonBlobCount: blobs.length,
-        historyFound: historyFound ?? null,
-        priceSnippets: (productHtml.match(/.{30}(fiyat|price).{50}/gi) || []).slice(0, 10),
-      };
+        productPageResult = {
+          htmlLength: productHtml.length,
+          jsonBlobCount: blobs.length,
+          historyFound: historyFound ?? null,
+          priceSnippets: (productHtml.match(/.{30}(fiyat|price).{50}/gi) || []).slice(0, 10),
+        };
+      } catch (err) {
+        productPageResult = {
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
     }
 
     return NextResponse.json({
