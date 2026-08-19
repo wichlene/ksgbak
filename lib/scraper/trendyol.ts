@@ -48,6 +48,66 @@ export function extractPriceFromHtml(html: string): number | null {
   return null;
 }
 
+/**
+ * Ürünün satış adedini çıkarır ("10 bin+ adet satıldı" gibi).
+ *
+ * Trendyol bu bilgiyi sayfa yapısına göre farklı yerlerde taşıyor, bu yüzden
+ * sırayla denenir: sayfaya gömülü JSON'daki hazır metin, sayısal sayaç
+ * alanları, son olarak da görünür metindeki kalıp. Bilgi her üründe
+ * bulunmuyor (Trendyol yalnızca belirli eşiği geçen ürünlerde gösteriyor).
+ */
+export function extractSoldCount(
+  html: string,
+  bodyText: string
+): { soldCountRaw: string | null; soldCount: number | null } {
+  // Sayfadaki tüm metinleri tek düzleme indir: HTML entity'leri ve
+  // bölünmez boşlukları normal boşluğa çevir.
+  const normalize = (s: string) =>
+    s
+      .replace(/&nbsp;/gi, " ")
+      .replace(/ /g, " ")
+      .replace(/&quot;/g, '"')
+      .replace(/\\u0028/g, "(")
+      .replace(/\s+/g, " ");
+
+  const haystacks = [normalize(html), normalize(bodyText)];
+
+  // 1) "10 bin+ adet satıldı" / "500+ adet satıldı" kalıbı
+  for (const text of haystacks) {
+    const m = text.match(
+      /([\d.,]+\s*(?:bin|milyon)?\s*\+?)\s*adet\s*sat[ıi]ld[ıi]/i
+    );
+    if (m) {
+      const raw = `${m[1].trim()} adet satıldı`.replace(/\s+/g, " ");
+      return { soldCountRaw: raw, soldCount: parseSoldCount(raw) };
+    }
+  }
+
+  // 2) JSON'daki hazır sosyal kanıt metni: "text":"10 bin+ adet satıldı"
+  for (const text of haystacks) {
+    const m = text.match(/"text"\s*:\s*"([^"]{0,40}sat[ıi]ld[ıi][^"]{0,10})"/i);
+    if (m) {
+      const raw = m[1].trim();
+      return { soldCountRaw: raw, soldCount: parseSoldCount(raw) };
+    }
+  }
+
+  // 3) Sayısal sayaç alanları
+  for (const text of haystacks) {
+    const m = text.match(
+      /"(?:orderCount|salesCount|soldCount|totalSalesCount|saleCount)"\s*:\s*"?(\d+)"?/i
+    );
+    if (m) {
+      const count = parseInt(m[1], 10);
+      if (Number.isFinite(count) && count > 0) {
+        return { soldCountRaw: null, soldCount: count };
+      }
+    }
+  }
+
+  return { soldCountRaw: null, soldCount: null };
+}
+
 export function isTrendyolUrl(url: string): boolean {
   try {
     const { hostname } = new URL(url);
@@ -129,13 +189,8 @@ export async function fetchTrendyolProduct(
     currentPrice = parseTurkishPrice(metaPrice);
   }
 
-  // 3) "X bin adet satıldı" metnini ham HTML üzerinden ara
-  const bodyText = $("body").text();
-  const soldMatch = bodyText.match(
-    /([\d.,]+\s*(?:bin|milyon)?\s*\+?\s*adet\s*satıldı)/i
-  );
-  const soldCountRaw = soldMatch ? soldMatch[1].replace(/\s+/g, " ").trim() : null;
-  const soldCount = parseSoldCount(soldCountRaw);
+  // 3) Satış adedi
+  const { soldCountRaw, soldCount } = extractSoldCount(html, $("body").text());
 
   return {
     trendyolProductId,

@@ -1,5 +1,5 @@
 import type { Product } from "@/lib/types";
-import { formatPriceTRY } from "@/lib/format";
+import { formatPriceTRY, formatSoldCount } from "@/lib/format";
 
 export function StatsRow({
   product,
@@ -8,6 +8,8 @@ export function StatsRow({
   product: Product;
   pointCount: number;
 }) {
+  const soldLabel = formatSoldCount(product.sold_count_raw, product.sold_count);
+
   const stats = [
     { label: "Güncel Fiyat", value: formatPriceTRY(product.current_price) },
     {
@@ -20,7 +22,11 @@ export function StatsRow({
       value: formatPriceTRY(product.highest_price),
       accent: "text-red-400",
     },
-    { label: "Fiyat Kaydı", value: `${pointCount} kayıt` },
+    // Satış adedi her üründe yayınlanmıyor; yoksa yerine kaç fiyat kaydımız
+    // olduğunu gösteriyoruz.
+    soldLabel
+      ? { label: "Satış Adedi", value: soldLabel }
+      : { label: "Fiyat Kaydı", value: `${pointCount} kayıt` },
   ];
 
   return (
