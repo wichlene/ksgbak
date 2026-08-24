@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - claude/trendyol-price-tracker-1rrpy1
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  build:
+    name: Typecheck + build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node kurulumu
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Bağımlılıklar
+        run: npm ci
+
+      - name: Tip kontrolü
+        run: npx tsc --noEmit
+
+      # Build, env değişkeni olmadan da geçer: Supabase/Redis client'ları lazy
+      # oluşturuluyor, veri çeken sayfa force-dynamic.
+      - name: Build
+        run: npm run build

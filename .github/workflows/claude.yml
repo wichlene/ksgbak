@@ -1,0 +1,57 @@
+name: Claude
+
+# PR/issue yorumlarında "@claude ..." yazınca Claude devreye girer.
+# Yetkilendirme: repo'ya Claude GitHub App kurulu olmalı + CLAUDE_CODE_OAUTH_TOKEN
+# (veya ANTHROPIC_API_KEY) secret'ı tanımlı olmalı. Ayrıntılar: SETUP.md
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened, assigned]
+
+jobs:
+  claude:
+    name: Claude Code
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+      id-token: write
+    steps:
+      # Secret yoksa workflow kırmızı hata vermek yerine uyarıyla atlansın.
+      - name: Yetkilendirme kontrolü
+        id: auth
+        env:
+          OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$OAUTH_TOKEN" ] || [ -n "$API_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::CLAUDE_CODE_OAUTH_TOKEN veya ANTHROPIC_API_KEY secret'ı tanımlı değil; adım atlandı. Kurulum icin SETUP.md."
+          fi
+
+      - name: Checkout
+        if: steps.auth.outputs.ready == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Claude Code çalıştır
+        if: steps.auth.outputs.ready == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}

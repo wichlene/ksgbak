@@ -1,0 +1,87 @@
+name: Vercel Deploy
+
+# OPSİYONEL: Vercel'in kendi Git entegrasyonu zaten bağlıysa bu workflow'a gerek
+# yok — VERCEL_TOKEN secret'ı eklenmediği sürece otomatik olarak atlanır.
+# Deploy'u Actions üzerinden yönetmek istersen SETUP.md'deki secret'ları ekle.
+on:
+  push:
+    branches:
+      - claude/trendyol-price-tracker-1rrpy1
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Yetkilendirme kontrolü
+        id: auth
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Vercel secret'ları tanımlı değil; deploy atlandı (Vercel Git entegrasyonu kullaniliyor olabilir)."
+          fi
+
+      - name: Checkout
+        if: steps.auth.outputs.ready == 'true'
+        uses: actions/checkout@v4
+
+      - name: Node kurulumu
+        if: steps.auth.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Vercel CLI
+        if: steps.auth.outputs.ready == 'true'
+        run: npm install --global vercel@latest
+
+      # main/default branch -> production, diğer her şey -> preview
+      - name: Ortamı belirle
+        if: steps.auth.outputs.ready == 'true'
+        id: env
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "target=production" >> "$GITHUB_OUTPUT"
+          else
+            echo "target=preview" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Vercel ortam bilgisini çek
+        if: steps.auth.outputs.ready == 'true'
+        run: vercel pull --yes --environment=${{ steps.env.outputs.target }} --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build
+        if: steps.auth.outputs.ready == 'true'
+        run: |
+          if [ "${{ steps.env.outputs.target }}" = "production" ]; then
+            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel build --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+
+      - name: Deploy
+        if: steps.auth.outputs.ready == 'true'
+        id: deploy
+        run: |
+          if [ "${{ steps.env.outputs.target }}" = "production" ]; then
+            url=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          else
+            url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deploy: $url" >> "$GITHUB_STEP_SUMMARY"
